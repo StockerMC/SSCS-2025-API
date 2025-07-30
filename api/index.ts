@@ -50,20 +50,20 @@ app.post("/notifications", async (req, res) => {
     const data = req.body;
     console.log(data);
 
-    const { data: userData, error } = await supabase
+    const { data: tokenData, error } = await supabase
       .from('tokens')
       .select('fcm_token')
-      .eq('device_unique_id', 'test')
+      .eq('unique_device_id', 'test')
       .single();
     
-    if (error || !userData) {
+    if (error || !tokenData) {
       console.error('Error fetching token from Supabase:', error);
-      return res.status(404).json({ error: "User not found or token not available" });
+      return res.status(404).json({ error: "FCM token not found" });
     }
     
-    const token = userData.fcm_token;
+    const token = tokenData.fcm_token;
     if (!token) {
-      return res.status(400).json({ error: "FCM token not found for user" });
+      return res.status(400).json({ error: "FCM token not found" });
     }
     
     await sendPartialNotification(token, data);
