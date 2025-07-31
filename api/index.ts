@@ -28,6 +28,95 @@ admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
 
+app.get("/settings", async (req, res) => {
+  try {
+    const deviceId = req.query.device_id;
+  
+    if (!deviceId) {
+      return res.status(400).json({ error: 'device_id is required' });
+    }
+
+    // Fetch settings from Supabase
+    const { data, error } = await supabase
+      .from('user_settings')
+      .select('*')
+      .eq('unique_device_id', deviceId)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      console.error('Error fetching settings:', error);
+      return res.status(500).json({ error: 'Failed to fetch settings' });
+    }
+
+    // If no settings found, return defaults
+    if (!data) {
+      const defaultSettings = {
+        unique_device_id: deviceId,
+        language: 'en-US',
+        volume: 100,
+        speech_mode: 'verbose',
+        alert_types_enabled: ['all'],
+        danger_sensitivity: 'medium',
+        notify_companion: true,
+        location_sharing_enabled: true,
+        auto_distress_timeout: 10,
+        emergency_contacts: [],
+        button_press_behavior: 'confirm_safe',
+        device_name: '',
+        wake_word: 'Hey Sentra',
+        fetch_interval: 300,
+        vibration_enabled: true,
+        haptic_pattern: 'pulse',
+        high_contrast_mode: false,
+        last_updated: new Date().toISOString(),
+      };
+
+      return res.json(defaultSettings);
+    }
+
+    // Return the fetched settings
+    return res.json(data);
+
+  } catch (error) {
+    console.error('API Error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post("/settings", async (req, res) => {
+  try {
+    const { device_id, ...settings } = req.body;
+
+    if (!device_id) {
+      return res.status(400).json({ error: 'device_id is required' });
+    }
+
+    // Update settings in Supabase
+    const { error } = await supabase
+      .from('user_settings')
+      .upsert({
+        unique_device_id: device_id,
+        ...settings,
+        last_updated: new Date().toISOString(),
+      }, {
+        onConflict: 'unique_device_id',
+      });
+
+    if (error) {
+      console.error('Error updating settings:', error);
+      return res.status(500).json({ error: 'Failed to update settings' });
+    }
+
+    return res.json({ success: true });
+
+  } catch (error) {
+    console.error('API Error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// TODO: Save sent notifications to supabase
+
 // Partial Push Notification
 async function sendPartialNotification(token, data) {
   return admin.messaging().send({
@@ -53,7 +142,7 @@ app.post("/notifications", async (req, res) => {
     const { data: tokenData, error } = await supabase
       .from('tokens')
       .select('fcm_token')
-      .eq('unique_device_id', 'test')
+      .eq('unique_device_id', 'companion_app')
       .single();
     
     if (error || !tokenData) {
